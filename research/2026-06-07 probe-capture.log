@@ -1,0 +1,131 @@
+== token: wHfx78P2SQaLaH1VQtUTwC73... (684 chars)
+== connecting wss://opentogethertube.com/api/room/2850ebf4-c60b-478b-a306-8188f7d07890
+== sent auth frame; listening (sending nothing else)
+
+[1] + 0.04s action=sync keys=['action', 'name', 'title', 'description', 'isTemporary', 'visibility', 'queueMode', 'currentSource', 'queue', 'isPlaying', 'playbackPosition', 'playbackSpeed', 'grants', 'hasOwner', 'voteCounts', 'videoSegments', 'autoSkipSegmentCategories', 'prevQueue', 'restoreQueueBehavior', 'enableVoteSkip', 'votesToSkip']
+{
+  "action": "sync",
+  "name": "2850ebf4-c60b-478b-a306-8188f7d07890",
+  "title": "",
+  "description": "",
+  "isTemporary": true,
+  "visibility": "unlisted",
+  "queueMode": "manual",
+  "currentSource": {
+    "service": "direct",
+    "id": "https://bortec.eu:18123/video/qqq.mp4",
+    "title": "qqq",
+    "description": "Full Link: https://bortec.eu:18123/video/qqq.mp4",
+    "mime": "video/mp4",
+    "length": 11
+  },
+  "queue": [],
+  "isPlaying": false,
+  "playbackPosition": 2.125,
+  "playbackSpeed": 1,
+  "grants": [
+    [
+      0,
+      113250303
+    ],
+    [
+      1,
+      113250303
+    ],
+   
+  ...[+466 chars]
+
+[2] + 0.08s action=user keys=['action', 'update']
+
+[3] + 0.08s action=event keys=['action', 'request', 'user', 'additional']
+
+[4] + 0.08s action=sync keys=['action', 'playbackPosition']
+{
+  "action": "sync",
+  "playbackPosition": 2.125
+}
+
+[5] + 0.08s action=you keys=['action', 'info']
+{
+  "action": "you",
+  "info": {
+    "id": "f78c2eac-d484-4f92-9d02-80347b0100d0"
+  }
+}
+
+[6] + 0.08s action=user keys=['action', 'update']
+
+[7] + 6.18s action=event keys=['action', 'request', 'user', 'additional']
+
+[8] + 6.23s action=sync keys=['action', 'isPlaying']
+{
+  "action": "sync",
+  "isPlaying": true
+}
+
+[9] + 6.28s action=sync keys=['action', 'isPlaying']
+{
+  "action": "sync",
+  "isPlaying": true
+}
+
+[10] +11.87s action=event keys=['action', 'request', 'user', 'additional']
+
+[11] +11.92s action=sync keys=['action', 'playbackPosition', 'isPlaying']
+{
+  "action": "sync",
+  "playbackPosition": 7.82,
+  "isPlaying": false
+}
+
+[12] +12.91s action=event keys=['action', 'request', 'user', 'additional']
+
+[13] +12.96s action=sync keys=['action', 'playbackPosition']
+{
+  "action": "sync",
+  "playbackPosition": 0.6
+}
+
+[14] +13.90s action=event keys=['action', 'request', 'user', 'additional']
+
+[15] +13.95s action=sync keys=['action', 'isPlaying']
+{
+  "action": "sync",
+  "isPlaying": true
+}
+
+[16] +16.06s action=event keys=['action', 'request', 'user', 'additional']
+
+[17] +16.11s action=sync keys=['action', 'playbackPosition']
+{
+  "action": "sync",
+  "playbackPosition": 1.151
+}
+
+[18] +17.97s action=event keys=['action', 'request', 'user', 'additional']
+
+[19] +18.02s action=sync keys=['action', 'playbackPosition', 'isPlaying']
+{
+  "action": "sync",
+  "playbackPosition": 3.016,
+  "isPlaying": false
+}
+
+[20] +28.38s action=event keys=['action', 'request', 'user', 'additional']
+
+[21] +28.43s action=sync keys=['action', 'isPlaying']
+{
+  "action": "sync",
+  "isPlaying": true
+}
+
+[22] +33.43s action=event keys=['action', 'request', 'user', 'additional']
+
+[23] +33.51s action=sync keys=['action', 'playbackPosition', 'isPlaying']
+{
+  "action": "sync",
+  "playbackPosition": 8.061,
+  "isPlaying": false
+}
+
+== done after 23 frame(s)
