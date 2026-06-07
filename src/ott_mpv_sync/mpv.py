@@ -123,9 +123,11 @@ class Mpv:
         while not self.closed.is_set():
             try:
                 chunk = self.conn.recv(4096)
-            except OSError:
+            except OSError as e:
+                warn("OSError while reading: " + str(e))
                 break
             if not chunk:
+                warn("no chunk while reading.")
                 break  # mpv closed the socket (window closed / quit)
             buf += chunk
             while b"\n" in buf:
@@ -148,11 +150,13 @@ class Mpv:
         if self.conn is not None:
             try:
                 self.conn.close()
-            except OSError:
+            except OSError as e:
+                warn("OSError while closing: " + str(e))
                 pass
         if self.proc is not None and self.proc.poll() is None:
             self.proc.terminate()
             try:
                 self.proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
+                warn("TimeoutExpired while terminating... now killing. ")
                 self.proc.kill()
