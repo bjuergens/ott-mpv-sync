@@ -62,7 +62,12 @@ class Follower:
             else:
                 self.mpv.command("loadfile", new_url, "replace")
             self.src_url = new_url
-            ok(f"loadfile {new_url} (start={pos})")
+            # Re-assert the room's play state: --keep-open pauses mpv at the
+            # previous file's EOF, and a source-change delta usually omits
+            # isPlaying (unchanged in the room), so without this an auto-advanced
+            # video would stay paused while the room keeps playing.
+            self.mpv.command("set_property", "pause", not self.playing)
+            ok(f"loadfile {new_url} (start={pos}, playing={self.playing})")
         elif pos is not None:
             # Standalone seek within an already-loaded file. Guard on a known
             # time-pos: if None, the file isn't ready yet (or just loaded with

@@ -31,6 +31,32 @@ def test_new_source_loads_with_start_option():
     assert ("loadfile", "http://x/v.mp4", "replace", "start=5.0") in mpv.commands
 
 
+def test_new_source_reasserts_play_state_when_room_playing():
+    # Regression: --keep-open pauses mpv at the prior file's EOF, and the
+    # auto-advance delta omits isPlaying — the new video must still play.
+    mpv, f = make()
+    f.playing = True  # room is playing
+    f.apply(
+        {
+            "currentSource": {"service": "direct", "id": "http://x/next.mp4"},
+            "playbackPosition": 0.0,
+        }
+    )
+    assert ("set_property", "pause", False) in mpv.commands
+
+
+def test_new_source_reasserts_pause_when_room_paused():
+    mpv, f = make()
+    f.playing = False  # room is paused
+    f.apply(
+        {
+            "currentSource": {"service": "direct", "id": "http://x/next.mp4"},
+            "playbackPosition": 0.0,
+        }
+    )
+    assert ("set_property", "pause", True) in mpv.commands
+
+
 def test_direct_source_falls_back_to_id():
     mpv, f = make()
     f.apply(
