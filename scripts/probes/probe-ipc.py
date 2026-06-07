@@ -5,6 +5,7 @@ Launches a headless idle mpv with an IPC socket, connects, and exercises the
 protocol: command replies (request_id), get_property, observe_property events,
 loadfile, set pause, seek. Prints every line the socket emits, classified.
 """
+
 import json
 import os
 import socket
@@ -19,9 +20,17 @@ SOCK = os.path.join(tempfile.mkdtemp(), "mpv.sock")
 def main():
     # Launch mpv headless+idle with the IPC server. mpv creates the socket.
     mpv = subprocess.Popen(
-        ["mpv", "--no-config", "--idle=yes", "--vo=null", "--ao=null",
-         "--no-terminal", f"--input-ipc-server={SOCK}"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        [
+            "mpv",
+            "--no-config",
+            "--idle=yes",
+            "--vo=null",
+            "--ao=null",
+            "--no-terminal",
+            f"--input-ipc-server={SOCK}",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     # Wait for the socket file to appear.
     for _ in range(50):
@@ -101,9 +110,21 @@ def main():
 def make_clip():
     path = os.path.join(tempfile.mkdtemp(), "clip.mp4")
     subprocess.run(
-        ["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi",
-         "-i", "testsrc=duration=10:size=320x240:rate=5", "-pix_fmt", "yuv420p",
-         path], check=True)
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=10:size=320x240:rate=5",
+            "-pix_fmt",
+            "yuv420p",
+            path,
+        ],
+        check=True,
+    )
     return path
 
 

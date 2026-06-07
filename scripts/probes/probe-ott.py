@@ -5,6 +5,7 @@ Passive: gets a token, opens the WS, sends exactly one `auth` frame, then prints
 every frame received (pretty-printed, truncated) for DURATION seconds. Sends
 nothing else. Verifies the documented bootstrap sequence (full sync -> you).
 """
+
 import asyncio
 import json
 import sys
@@ -25,7 +26,7 @@ def get_token():
 
 def short(obj, n=600):
     s = json.dumps(obj, indent=2, ensure_ascii=False)
-    return s if len(s) <= n else s[:n] + f"\n  ...[+{len(s)-n} chars]"
+    return s if len(s) <= n else s[:n] + f"\n  ...[+{len(s) - n} chars]"
 
 
 async def main():

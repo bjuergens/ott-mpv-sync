@@ -1,0 +1,158 @@
+"""Launch mpv with a JSON IPC socket and drive it over that socket.
+
+We own mpv's whole lifecycle: spawn it idle with --input-ipc-server, connect to
+the unix socket, and send fire-and-forget commands. A reader thread mirrors the
+few properties we care about (time-pos, pause) and detects mpv exiting (socket
+EOF). All translation logic lives in `follower`; this module is pure transport.
+"""
+
+import json
+import os
+import re
+import socket
+import subprocess
+import threading
+import time
+
+from .errors import MpvError
+from .log import error, ok, warn
+
+MIN_MPV = (0, 37)  # 3-arg loadfile / start= option verified from this version
+_SOCKET_TIMEOUT = 5.0  # seconds to wait for mpv to create the IPC socket
+
+
+class Mpv:
+    def __init__(self, mpv_bin: str, socket_path: str, extra_args=()):
+        self.mpv_bin = mpv_bin
+        self.sock_path = socket_path
+        self.extra_args = list(extra_args)
+        self.proc: subprocess.Popen | None = None
+        self.conn: socket.socket | None = None
+        self._rid = 0
+        self._pending: dict[int, tuple] = {}
+        self.mirror = {"time-pos": None, "pause": None}
+        self.closed = threading.Event()
+
+    # -- lifecycle ---------------------------------------------------------
+    def start(self) -> None:
+        self._check_socket_path()
+        self._warn_on_old_version()
+        # A normal, visible mpv (the user watches it), idle until the room gives
+        # us a source.
+        self.proc = subprocess.Popen(
+            [
+                self.mpv_bin,
+                "--idle=yes",
+                "--force-window=yes",
+                "--keep-open=yes",
+                f"--input-ipc-server={self.sock_path}",
+                *self.extra_args,
+            ]
+        )
+        self._wait_for_socket()
+        self.conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.conn.connect(self.sock_path)
+        threading.Thread(target=self._reader, daemon=True, name="mpv-ipc").start()
+        # Observe the props we mirror for the seek-threshold check.
+        self.command("observe_property", 1, "pause")
+        self.command("observe_property", 2, "time-pos")
+        ok(f"mpv started, IPC at {self.sock_path}")
+
+    def _check_socket_path(self) -> None:
+        if os.path.exists(self.sock_path):
+            raise MpvError(
+                f"IPC socket already exists: {self.sock_path}. "
+                "Remove it or pass a different --socket."
+            )
+        parent = os.path.dirname(self.sock_path) or "."
+        if not os.path.isdir(parent):
+            raise MpvError(f"IPC socket directory does not exist: {parent}")
+        if not os.access(parent, os.W_OK):
+            raise MpvError(f"cannot create IPC socket in {parent} (not writable)")
+
+    def _warn_on_old_version(self) -> None:
+        try:
+            out = subprocess.run(
+                [self.mpv_bin, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as e:
+            warn(f"could not probe mpv version: {e}")
+            return
+        m = re.search(r"mpv\s+v?(\d+)\.(\d+)", out)
+        if not m:
+            return
+        version = (int(m.group(1)), int(m.group(2)))
+        if version < MIN_MPV:
+            warn(
+                f"mpv {version[0]}.{version[1]} is older than "
+                f"{MIN_MPV[0]}.{MIN_MPV[1]}; seeking/loadfile may misbehave."
+            )
+
+    def _wait_for_socket(self) -> None:
+        deadline = time.monotonic() + _SOCKET_TIMEOUT
+        while time.monotonic() < deadline:
+            if os.path.exists(self.sock_path):
+                return
+            code = self.proc.poll()
+            if code is not None:
+                raise MpvError(f"mpv exited during startup (exit code {code})")
+            time.sleep(0.05)
+        raise MpvError(
+            f"mpv IPC socket never appeared at {self.sock_path} within {_SOCKET_TIMEOUT:g}s"
+        )
+
+    # -- IPC ---------------------------------------------------------------
+    def command(self, *args) -> None:
+        """Fire-and-forget JSON IPC command. Failures are logged by the reader."""
+        if self.conn is None:
+            return
+        self._rid += 1
+        self._pending[self._rid] = args
+        frame = json.dumps({"command": list(args), "request_id": self._rid})
+        try:
+            self.conn.sendall(frame.encode() + b"\n")
+        except OSError as e:
+            error(f"IPC send failed ({args[0] if args else '?'}): {e}")
+            self.closed.set()
+
+    def _reader(self) -> None:
+        buf = b""
+        while not self.closed.is_set():
+            try:
+                chunk = self.conn.recv(4096)
+            except OSError:
+                break
+            if not chunk:
+                break  # mpv closed the socket (window closed / quit)
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                if line.strip():
+                    self._handle(json.loads(line))
+        warn("mpv closed; shutting down")
+        self.closed.set()
+
+    def _handle(self, msg: dict) -> None:
+        if msg.get("event") == "property-change":
+            self.mirror[msg["name"]] = msg.get("data")
+        elif "request_id" in msg:
+            cmd = self._pending.pop(msg["request_id"], None)
+            if msg.get("error") not in (None, "success"):
+                error(f"mpv rejected {cmd}: {msg['error']}")
+
+    def stop(self) -> None:
+        self.closed.set()
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except OSError:
+                pass
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
