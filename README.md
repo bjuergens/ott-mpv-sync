@@ -25,6 +25,11 @@ With [uv](https://docs.astral.sh/uv/) — no install needed:
 uvx ott-mpv-sync https://opentogethertube.com/room/your-room
 ```
 
+Or run directly from github
+```sh
+uvx --from git+https://github.com/bjuergens/ott-mpv-sync ott-mpv-sync <room-url>
+```
+
 Or install it as a tool:
 
 ```sh
@@ -40,8 +45,6 @@ other member) — pause, seek, change source or speed — and mpv follows.
 ```
 ott-mpv-sync <room-url> [--mpv PATH] [--socket PATH] [-- <extra mpv args>]
 
-# or run directly from github
-uvx --from git+https://github.com/bjuergens/ott-mpv-sync ott-mpv-sync <room-url> [--mpv PATH] [--socket PATH] [-- <extra mpv args>]
 ```
 
 - **`<room-url>`** (required) — the full room URL from your browser, e.g.
