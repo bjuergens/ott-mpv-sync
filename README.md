@@ -105,4 +105,4 @@ wired up. Locked/private rooms (which may need a logged-in token) are untested.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+AGPL-3.0-or-later — see [LICENSE](LICENSE).
