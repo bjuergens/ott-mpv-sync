@@ -132,7 +132,12 @@ class Mpv:
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 if line.strip():
-                    self._handle(json.loads(line))
+                    # Never let one bad frame kill this thread silently: that would
+                    # leave the follower running blind against an unobserved mpv.
+                    try:
+                        self._handle(json.loads(line))
+                    except (json.JSONDecodeError, KeyError) as e:
+                        warn(f"ignoring malformed mpv IPC frame ({type(e).__name__}: {e})")
         warn("mpv closed; shutting down")
         self.closed.set()
 

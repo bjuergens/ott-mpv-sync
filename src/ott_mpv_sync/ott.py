@@ -26,8 +26,11 @@ def get_token(grant_url: str) -> str:
             payload = json.load(r)
     except urllib.error.HTTPError as e:
         raise OttSyncError(f"auth grant failed: HTTP {e.code} at {grant_url}") from e
-    except (urllib.error.URLError, OSError) as e:
+    except urllib.error.URLError as e:
         raise OttSyncError(f"cannot reach OTT server at {grant_url}: {e.reason}") from e
+    except OSError as e:
+        # A bare OSError/TimeoutError (e.g. a read timeout) has no .reason attribute.
+        raise OttSyncError(f"cannot reach OTT server at {grant_url}: {e}") from e
     except json.JSONDecodeError as e:
         raise OttSyncError(f"auth grant returned invalid JSON from {grant_url}") from e
 
