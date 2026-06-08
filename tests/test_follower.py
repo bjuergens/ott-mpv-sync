@@ -1,5 +1,13 @@
+import json
+import threading
+
+import pytest
+from websockets.exceptions import ConnectionClosed
+
+from ott_mpv_sync import ott
 from ott_mpv_sync.follower import Follower
 from ott_mpv_sync.roomurl import parse_room_url
+from ott_mpv_sync.utils import OttSyncError
 
 EP = parse_room_url("https://host/room/r")
 
@@ -10,6 +18,7 @@ class FakeMpv:
     def __init__(self):
         self.commands = []
         self.mirror = {"time-pos": None, "pause": None}
+        self.closed = threading.Event()
 
     def command(self, *args):
         self.commands.append(args)
@@ -125,3 +134,74 @@ def test_bare_resume_does_not_seek_or_load():
     mpv, f = make()
     f.apply({"isPlaying": True})  # no position, no source (resume)
     assert not any(c[0] in ("seek", "loadfile") for c in mpv.commands)
+
+
+# -- connection loop ------------------------------------------------------
+def _closed():
+    e = ConnectionClosed(None, None)
+    return e
+
+
+class FakeConn:
+    """Yields queued frames from recv(), then raises the queued exception."""
+
+    def __init__(self, frames, then=None):
+        self._frames = list(frames)
+        self._then = then
+        self.closed = False
+
+    def recv(self, timeout=None):
+        if self._frames:
+            return self._frames.pop(0)
+        if self._then is not None:
+            raise self._then
+        raise AssertionError("recv past end without a terminal exception")
+
+    def close(self):
+        self.closed = True
+
+
+def test_bootstrap_applied_before_listen():
+    # connect() captures the first sync; run() must apply it on the first listen.
+    mpv, f = make()
+    bootstrap = json.dumps(
+        {
+            "action": "sync",
+            "currentSource": {"service": "direct", "id": "http://x/v.mp4"},
+            "playbackPosition": 0.0,
+        }
+    )
+    f._conn = FakeConn([], then=_closed())  # listen sees no live frames, then drops
+    f._bootstrap = bootstrap
+    # _listen applies the bootstrap, then recv raises ConnectionClosed (transient).
+    with pytest.raises(ConnectionClosed):
+        f._listen(f._conn)
+    assert any(c[0] == "loadfile" for c in mpv.commands)
+    assert f._bootstrap is None  # consumed exactly once
+
+
+def test_unload_frame_stops_listen():
+    mpv, f = make()
+    conn = FakeConn([json.dumps({"action": "unload"})])
+    f._listen(conn)  # returns cleanly on unload
+    assert ("stop",) in mpv.commands
+
+
+def test_rejected_auth_is_fatal(monkeypatch):
+    mpv, f = make()
+
+    def boom(ep):
+        raise OttSyncError("room 'r' rejected our auth")
+
+    monkeypatch.setattr(ott, "connect_and_auth", boom)
+    with pytest.raises(OttSyncError):
+        f.run()  # _conn is None -> reconnect -> fatal, not retried
+
+
+def test_malformed_frame_propagates_not_swallowed():
+    # A KeyError from a bad frame is a real bug: it must NOT be caught as transient.
+    mpv, f = make()
+    conn = FakeConn([json.dumps({"action": "sync", "currentSource": {"service": "direct"}})])
+    # currentSource without src_url or id -> KeyError in apply()
+    with pytest.raises(KeyError):
+        f._listen(conn)
