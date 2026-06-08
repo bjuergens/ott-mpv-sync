@@ -14,11 +14,6 @@ from .mpv import Mpv
 from .roomurl import RoomEndpoints
 from .utils import OttSyncError, ok, warn
 
-# Transport-level failures we retry. A failure outside this set (e.g. a KeyError
-# from a malformed frame) is a real bug and must propagate loudly, not be
-# silently swallowed by the reconnect loop.
-_TRANSIENT = (ConnectionClosed, TimeoutError, OSError)
-
 SEEK_THRESHOLD = 3.0  # seconds; below this, let mpv's own clock run (±10s tolerance)
 _RECONNECT_DELAY = 3.0
 _RECV_TIMEOUT = 1.0  # wake the recv loop this often to observe mpv shutdown
@@ -110,10 +105,10 @@ class Follower:
         Assumes `connect()` established the first connection. The retry policy is
         keyed on the exception *type*, decided once at the transport boundary:
 
-        * OttSyncError  -> fatal (bad token / rejected auth): re-raise and stop.
-        * _TRANSIENT    -> a drop/timeout: log the specific error and reconnect
+        * OttSyncError    -> fatal (bad token / rejected auth): re-raise and stop.
+        * transport error -> a drop/timeout: log the specific error and reconnect
           (a fresh full sync re-bootstraps).
-        * anything else -> a real bug: let it propagate loudly (fail-fast).
+        * anything else   -> a real bug: let it propagate loudly (fail-fast).
         """
         while not self.mpv.closed.is_set():
             if self._conn is None:
@@ -121,7 +116,9 @@ class Follower:
                     self._conn, self._bootstrap = ott.connect_and_auth(self.ep)
                 except OttSyncError:
                     raise  # rejected auth is fatal even mid-session
-                except _TRANSIENT as e:
+                # Retry only transport failures. Anything else (e.g. a KeyError
+                # from a malformed frame) is a real bug — let it propagate loudly.
+                except (ConnectionClosed, TimeoutError, OSError) as e:
                     warn(
                         f"OTT reconnect failed ({type(e).__name__}: {e}); "
                         f"retrying in {_RECONNECT_DELAY:g}s"
@@ -132,7 +129,7 @@ class Follower:
             try:
                 self._listen(self._conn)
                 return  # _listen returned cleanly (unload / mpv closed)
-            except _TRANSIENT as e:
+            except (ConnectionClosed, TimeoutError, OSError) as e:
                 warn(
                     f"OTT connection lost ({type(e).__name__}: {e}); "
                     f"reconnecting in {_RECONNECT_DELAY:g}s"
