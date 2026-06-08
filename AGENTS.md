@@ -6,7 +6,12 @@ This is a plugin that syncs a local mp4 instance to a known room on opentogether
 
 ## Tooling
 
-(todo: how to run lint, tests, etc)
+Managed with `uv`. Common commands:
+
+- `uv run pytest` — run the test suite
+- `uv run ruff check .` — lint (add `--fix` to auto-fix)
+- `uv run ruff format .` — format (add `--check` to verify only)
+- `uv run ott-mpv-sync <room-url>` — run the CLI
 
 # General 
 
