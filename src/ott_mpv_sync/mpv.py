@@ -14,8 +14,7 @@ import subprocess
 import threading
 import time
 
-from .errors import MpvError
-from .log import error, ok, warn
+from .utils import OttSyncError, error, ok, warn
 
 MIN_MPV = (0, 37)  # 3-arg loadfile / start= option verified from this version
 _SOCKET_TIMEOUT = 5.0  # seconds to wait for mpv to create the IPC socket
@@ -60,15 +59,15 @@ class Mpv:
 
     def _check_socket_path(self) -> None:
         if os.path.exists(self.sock_path):
-            raise MpvError(
+            raise OttSyncError(
                 f"IPC socket already exists: {self.sock_path}. "
                 "Remove it or pass a different --socket."
             )
         parent = os.path.dirname(self.sock_path) or "."
         if not os.path.isdir(parent):
-            raise MpvError(f"IPC socket directory does not exist: {parent}")
+            raise OttSyncError(f"IPC socket directory does not exist: {parent}")
         if not os.access(parent, os.W_OK):
-            raise MpvError(f"cannot create IPC socket in {parent} (not writable)")
+            raise OttSyncError(f"cannot create IPC socket in {parent} (not writable)")
 
     def _warn_on_old_version(self) -> None:
         try:
@@ -98,9 +97,9 @@ class Mpv:
                 return
             code = self.proc.poll()
             if code is not None:
-                raise MpvError(f"mpv exited during startup (exit code {code})")
+                raise OttSyncError(f"mpv exited during startup (exit code {code})")
             time.sleep(0.05)
-        raise MpvError(
+        raise OttSyncError(
             f"mpv IPC socket never appeared at {self.sock_path} within {_SOCKET_TIMEOUT:g}s"
         )
 

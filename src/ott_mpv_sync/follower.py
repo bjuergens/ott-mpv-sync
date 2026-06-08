@@ -8,10 +8,9 @@ edge cases — start= on load, time-pos-guarded seek, idempotent isPlaying).
 import json
 
 from . import ott
-from .errors import OttError, OttSyncError
-from .log import ok, warn
 from .mpv import Mpv
 from .roomurl import RoomEndpoints
+from .utils import OttSyncError, ok, warn
 
 SEEK_THRESHOLD = 3.0  # seconds; below this, let mpv's own clock run (±10s tolerance)
 _RECONNECT_DELAY = 3.0
@@ -90,7 +89,7 @@ class Follower:
         except OttSyncError:
             raise  # auth-grant failures are already typed/fatal
         except Exception as e:
-            raise OttError(f"could not join room {self.ep.room!r} at {self.ep.host}: {e}") from e
+            raise OttSyncError(f"could not join room {self.ep.room!r} at {self.ep.host}: {e}") from e
         ok(f"joined room {self.ep.room} (follow-only)")
 
     def run(self) -> None:

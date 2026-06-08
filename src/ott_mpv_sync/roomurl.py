@@ -16,7 +16,7 @@ by preserving everything before the `room` segment as a base prefix.
 from dataclasses import dataclass
 from urllib.parse import quote, unquote, urlsplit
 
-from .errors import RoomUrlError
+from .utils import OttSyncError
 
 
 @dataclass(frozen=True)
@@ -29,19 +29,19 @@ class RoomEndpoints:
 
 
 def parse_room_url(url: str) -> RoomEndpoints:
-    """Parse a room URL into endpoints, or raise RoomUrlError with guidance."""
+    """Parse a room URL into endpoints, or raise OttSyncError with guidance."""
     parts = urlsplit(url.strip())
 
     scheme = parts.scheme.lower()
     if scheme not in ("http", "https"):
-        raise RoomUrlError(
+        raise OttSyncError(
             f"room URL must start with http:// or https:// (got {url!r}). "
             "Paste the full room URL from your browser."
         )
 
     host = parts.hostname
     if not host:
-        raise RoomUrlError(f"room URL has no host: {url!r}")
+        raise OttSyncError(f"room URL has no host: {url!r}")
     netloc = host if parts.port is None else f"{host}:{parts.port}"
 
     # Find the LAST `room` segment so a base path that itself contains "room"
@@ -50,13 +50,13 @@ def parse_room_url(url: str) -> RoomEndpoints:
     try:
         idx = len(segments) - 1 - segments[::-1].index("room")
     except ValueError:
-        raise RoomUrlError(f"room URL must contain a /room/<name> segment: {url!r}") from None
+        raise OttSyncError(f"room URL must contain a /room/<name> segment: {url!r}") from None
     if idx + 1 >= len(segments):
-        raise RoomUrlError(f"room URL is missing the room name after /room/: {url!r}")
+        raise OttSyncError(f"room URL is missing the room name after /room/: {url!r}")
 
     room = unquote(segments[idx + 1]).strip()
     if not room:
-        raise RoomUrlError(f"room URL has an empty room name: {url!r}")
+        raise OttSyncError(f"room URL has an empty room name: {url!r}")
 
     base = "/" + "/".join(segments[:idx]) if idx > 0 else ""
     ws_scheme = "wss" if scheme == "https" else "ws"

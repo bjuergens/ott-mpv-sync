@@ -13,11 +13,10 @@ import shutil
 import tempfile
 
 from . import __version__
-from .errors import MpvError, OttSyncError
 from .follower import Follower
-from .log import error, ok, warn
 from .mpv import Mpv
 from .roomurl import parse_room_url
+from .utils import OttSyncError, error, ok, warn
 
 
 def _parse_args(argv=None) -> argparse.Namespace:
@@ -60,7 +59,7 @@ def _run(args: argparse.Namespace) -> int:
 
     mpv_bin = shutil.which(args.mpv)
     if not mpv_bin:
-        raise MpvError(f"mpv not found: {args.mpv!r}. Install mpv or pass --mpv PATH.")
+        raise OttSyncError(f"mpv not found: {args.mpv!r}. Install mpv or pass --mpv PATH.")
 
     socket_path = args.socket or os.path.join(tempfile.mkdtemp(prefix="ott-mpv-sync-"), "mpv.sock")
 
@@ -85,7 +84,7 @@ def main(argv=None) -> int:
         return _run(args)
     except OttSyncError as e:
         error(str(e))
-        return e.exit_code
+        return 1
     except KeyboardInterrupt:
         warn("interrupted")
         return 0
