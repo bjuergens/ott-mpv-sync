@@ -1,7 +1,16 @@
 
 # OTT Sync for MPV
 
-This is a plugin that syncs a local mp4 instance to a known room on opentogethertube. Some delay (~10s) is fine. This plugin only follows the room, and does not do control. s
+This is a plugin that syncs a local mp4 instance to a known room on opentogethertube. Some delay (~10s) is fine. This plugin only follows the room, and does not do control.
+
+
+## Tooling
+
+(todo: how to run lint, tests, etc)
+
+# General 
+
+This section is the same for multiple projects. 
 
 ## Principles
 
