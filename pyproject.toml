@@ -41,7 +41,7 @@ Issues = "https://github.com/wotaniip/ott-mpv-sync/issues"
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [tool.ruff]
-line-length = 320  # effectively no wrapping target; E501 is also ignored below
+line-length = 260  # wrapping target; E501 lint is also ignored below
 target-version = "py310"
 
 [tool.ruff.lint]
