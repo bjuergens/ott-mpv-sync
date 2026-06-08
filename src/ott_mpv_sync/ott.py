@@ -12,8 +12,8 @@ import urllib.request
 from websockets.sync.client import ClientConnection
 from websockets.sync.client import connect as ws_connect
 
-from .utils import OttSyncError
 from .roomurl import RoomEndpoints
+from .utils import OttSyncError
 
 _OPEN_TIMEOUT = 10.0
 

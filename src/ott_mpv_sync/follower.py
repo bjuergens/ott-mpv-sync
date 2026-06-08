@@ -89,7 +89,9 @@ class Follower:
         except OttSyncError:
             raise  # auth-grant failures are already typed/fatal
         except Exception as e:
-            raise OttSyncError(f"could not join room {self.ep.room!r} at {self.ep.host}: {e}") from e
+            raise OttSyncError(
+                f"could not join room {self.ep.room!r} at {self.ep.host}: {e}"
+            ) from e
         ok(f"joined room {self.ep.room} (follow-only)")
 
     def run(self) -> None:
