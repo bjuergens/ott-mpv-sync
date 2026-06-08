@@ -34,10 +34,7 @@ def parse_room_url(url: str) -> RoomEndpoints:
 
     scheme = parts.scheme.lower()
     if scheme not in ("http", "https"):
-        raise OttSyncError(
-            f"room URL must start with http:// or https:// (got {url!r}). "
-            "Paste the full room URL from your browser."
-        )
+        raise OttSyncError(f"room URL must start with http:// or https:// (got {url!r}). Paste the full room URL from your browser.")
 
     host = parts.hostname
     if not host:

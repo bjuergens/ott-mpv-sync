@@ -60,14 +60,8 @@ def connect_and_auth(ep: RoomEndpoints) -> tuple[ClientConnection, str]:
         bootstrap = conn.recv(timeout=_OPEN_TIMEOUT)
     except ConnectionClosed as e:
         conn.close()
-        raise OttSyncError(
-            f"room {ep.room!r} rejected our auth and closed the connection "
-            f"({type(e).__name__}: {e})"
-        ) from e
+        raise OttSyncError(f"room {ep.room!r} rejected our auth and closed the connection ({type(e).__name__}: {e})") from e
     except TimeoutError as e:
         conn.close()
-        raise OttSyncError(
-            f"room {ep.room!r} accepted the socket but sent no data within "
-            f"{_OPEN_TIMEOUT:g}s — cannot confirm the join"
-        ) from e
+        raise OttSyncError(f"room {ep.room!r} accepted the socket but sent no data within {_OPEN_TIMEOUT:g}s — cannot confirm the join") from e
     return conn, bootstrap
