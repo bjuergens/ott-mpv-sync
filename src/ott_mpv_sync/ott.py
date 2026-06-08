@@ -9,6 +9,7 @@ import json
 import urllib.error
 import urllib.request
 
+from websockets.exceptions import ConnectionClosed
 from websockets.sync.client import ClientConnection
 from websockets.sync.client import connect as ws_connect
 
@@ -36,14 +37,34 @@ def get_token(grant_url: str) -> str:
     return token
 
 
-def connect_and_auth(ep: RoomEndpoints) -> ClientConnection:
-    """Mint a token, open the room WS, and send the single auth frame.
+def connect_and_auth(ep: RoomEndpoints) -> tuple[ClientConnection, str]:
+    """Mint a token, open the room WS, send the auth frame, and confirm the join.
 
-    Returns an open connection (usable as a context manager). Raises OttSyncError if
-    the token cannot be obtained; other connection failures propagate as the
-    underlying websockets/OS exceptions for the caller to classify.
+    OTT sends no auth-ack: on success it immediately pushes a full `sync`; on a
+    rejected token it closes the socket without a frame (see research initial.md
+    §1.4). So we read that first frame here — its arrival *is* the proof the auth
+    was accepted. Returns ``(open_conn, bootstrap_frame)``; the caller applies the
+    bootstrap and then keeps reading.
+
+    Raises OttSyncError for every fatal, non-retryable cause (bad grant, rejected
+    auth, silent server). Transport failures while *opening* the socket propagate
+    as the underlying websockets/OS exceptions for the caller to classify.
     """
     token = get_token(ep.grant_url)
     conn = ws_connect(ep.ws_url, open_timeout=_OPEN_TIMEOUT)
     conn.send(json.dumps({"action": "auth", "token": token}))
-    return conn
+    try:
+        bootstrap = conn.recv(timeout=_OPEN_TIMEOUT)
+    except ConnectionClosed as e:
+        conn.close()
+        raise OttSyncError(
+            f"room {ep.room!r} rejected our auth and closed the connection "
+            f"({type(e).__name__}: {e})"
+        ) from e
+    except TimeoutError as e:
+        conn.close()
+        raise OttSyncError(
+            f"room {ep.room!r} accepted the socket but sent no data within "
+            f"{_OPEN_TIMEOUT:g}s — cannot confirm the join"
+        ) from e
+    return conn, bootstrap

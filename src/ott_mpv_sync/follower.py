@@ -7,10 +7,17 @@ edge cases — start= on load, time-pos-guarded seek, idempotent isPlaying).
 
 import json
 
+from websockets.exceptions import ConnectionClosed
+
 from . import ott
 from .mpv import Mpv
 from .roomurl import RoomEndpoints
 from .utils import OttSyncError, ok, warn
+
+# Transport-level failures we retry. A failure outside this set (e.g. a KeyError
+# from a malformed frame) is a real bug and must propagate loudly, not be
+# silently swallowed by the reconnect loop.
+_TRANSIENT = (ConnectionClosed, TimeoutError, OSError)
 
 SEEK_THRESHOLD = 3.0  # seconds; below this, let mpv's own clock run (±10s tolerance)
 _RECONNECT_DELAY = 3.0
@@ -24,6 +31,7 @@ class Follower:
         self.src_url: str | None = None  # local mirror of the loaded source
         self.playing = False
         self._conn = None  # active WebSocket connection (set by connect())
+        self._bootstrap: str | None = None  # first sync frame, applied before listening
 
     # -- translation -------------------------------------------------------
     def apply(self, delta: dict) -> None:
@@ -82,41 +90,53 @@ class Follower:
         """Open the room WebSocket and authenticate — fail fast.
 
         Called BEFORE mpv launches, so a bad URL / unreachable server / missing
-        room fails with a clean error and no stray mpv window.
+        room / rejected auth fails with a clean error and no stray mpv window.
+        At startup *any* failure is fatal: there is no window worth keeping alive
+        yet, so a transient open error becomes an OttSyncError too.
         """
         try:
-            self._conn = ott.connect_and_auth(self.ep)
+            self._conn, self._bootstrap = ott.connect_and_auth(self.ep)
         except OttSyncError:
-            raise  # auth-grant failures are already typed/fatal
+            raise  # grant / auth-rejection: already typed and fatal
         except Exception as e:
             raise OttSyncError(
-                f"could not join room {self.ep.room!r} at {self.ep.host}: {e}"
+                f"could not join room {self.ep.room!r} at {self.ep.host} ({type(e).__name__}: {e})"
             ) from e
         ok(f"joined room {self.ep.room} (follow-only)")
 
     def run(self) -> None:
-        """Follow the room until mpv exits, reconnecting on drops.
+        """Follow the room until mpv exits, reconnecting on transient drops.
 
-        Assumes `connect()` already established the first connection. A drop
-        reconnects (a fresh full sync re-bootstraps); auth-grant failures during
-        reconnect are fatal.
+        Assumes `connect()` established the first connection. The retry policy is
+        keyed on the exception *type*, decided once at the transport boundary:
+
+        * OttSyncError  -> fatal (bad token / rejected auth): re-raise and stop.
+        * _TRANSIENT    -> a drop/timeout: log the specific error and reconnect
+          (a fresh full sync re-bootstraps).
+        * anything else -> a real bug: let it propagate loudly (fail-fast).
         """
         while not self.mpv.closed.is_set():
             if self._conn is None:
                 try:
-                    self._conn = ott.connect_and_auth(self.ep)
-                    ok(f"rejoined room {self.ep.room} (follow-only)")
+                    self._conn, self._bootstrap = ott.connect_and_auth(self.ep)
                 except OttSyncError:
-                    raise
-                except Exception as e:
-                    warn(f"OTT reconnect failed: {e!r}; retrying in {_RECONNECT_DELAY:g}s")
+                    raise  # rejected auth is fatal even mid-session
+                except _TRANSIENT as e:
+                    warn(
+                        f"OTT reconnect failed ({type(e).__name__}: {e}); "
+                        f"retrying in {_RECONNECT_DELAY:g}s"
+                    )
                     self.mpv.closed.wait(_RECONNECT_DELAY)
                     continue
+                ok(f"rejoined room {self.ep.room} (follow-only)")
             try:
                 self._listen(self._conn)
                 return  # _listen returned cleanly (unload / mpv closed)
-            except Exception as e:
-                warn(f"OTT connection lost: {e!r}; reconnecting in {_RECONNECT_DELAY:g}s")
+            except _TRANSIENT as e:
+                warn(
+                    f"OTT connection lost ({type(e).__name__}: {e}); "
+                    f"reconnecting in {_RECONNECT_DELAY:g}s"
+                )
                 self.close()
                 self.mpv.closed.wait(_RECONNECT_DELAY)
         self.close()
@@ -128,18 +148,31 @@ class Follower:
             except Exception:
                 pass
             self._conn = None
+        self._bootstrap = None
 
     def _listen(self, conn) -> None:
+        # Apply the bootstrap sync captured at connect time before reading more,
+        # so a reconnect re-initializes mpv from the room's live state.
+        if self._bootstrap is not None:
+            raw, self._bootstrap = self._bootstrap, None
+            if not self._dispatch(raw):
+                return
         while not self.mpv.closed.is_set():
             try:
                 raw = conn.recv(timeout=_RECV_TIMEOUT)
             except TimeoutError:
                 continue  # periodic wake to re-check mpv.closed
-            frame = json.loads(raw)
-            action = frame.get("action")
-            if action == "sync":
-                self.apply(frame)
-            elif action == "unload":
-                warn("room unloaded; stopping")
-                self.mpv.command("stop")
+            if not self._dispatch(raw):
                 return
+
+    def _dispatch(self, raw) -> bool:
+        """Handle one server frame. Returns False to stop the listen loop."""
+        frame = json.loads(raw)
+        action = frame.get("action")
+        if action == "sync":
+            self.apply(frame)
+        elif action == "unload":
+            warn("room unloaded; stopping")
+            self.mpv.command("stop")
+            return False
+        return True
