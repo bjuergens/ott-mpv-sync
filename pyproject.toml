@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Follow-only client that mirrors an OpenTogetherTube room's playback into a local mpv."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 authors = [{ name = "wotaniip", email = "wotaniip@googlemail.com" }]
 keywords = ["mpv", "opentogethertube", "ott", "websocket", "sync", "watch-together"]
