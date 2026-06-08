@@ -1,7 +1,7 @@
 import pytest
 
-from ott_mpv_sync.errors import RoomUrlError
 from ott_mpv_sync.roomurl import parse_room_url
+from ott_mpv_sync.utils import OttSyncError
 
 
 def test_https_room_derives_wss_and_grant():
@@ -73,5 +73,5 @@ def test_last_room_segment_wins():
     ],
 )
 def test_invalid_urls_raise(url):
-    with pytest.raises(RoomUrlError):
+    with pytest.raises(OttSyncError):
         parse_room_url(url)
