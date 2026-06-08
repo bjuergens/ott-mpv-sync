@@ -137,7 +137,7 @@ class Mpv:
                     try:
                         self._handle(json.loads(line))
                     except (json.JSONDecodeError, KeyError) as e:
-                        warn(f"ignoring malformed mpv IPC frame ({type(e).__name__}: {e})")
+                        warn(f"ignoring malformed mpv IPC frame ({type(e).__name__}: {e}): {line!r}")
         warn("mpv closed; shutting down")
         self.closed.set()
 
