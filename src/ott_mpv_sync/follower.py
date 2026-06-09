@@ -94,9 +94,7 @@ class Follower:
         except OttSyncError:
             raise  # grant / auth-rejection: already typed and fatal
         except Exception as e:
-            raise OttSyncError(
-                f"could not join room {self.ep.room!r} at {self.ep.host} ({type(e).__name__}: {e})"
-            ) from e
+            raise OttSyncError(f"could not join room {self.ep.room!r} at {self.ep.host} ({type(e).__name__}: {e})") from e
         ok(f"joined room {self.ep.room} (follow-only)")
 
     def run(self) -> None:
@@ -119,10 +117,7 @@ class Follower:
                 # Retry only transport failures. Anything else (e.g. a KeyError
                 # from a malformed frame) is a real bug — let it propagate loudly.
                 except (ConnectionClosed, TimeoutError, OSError) as e:
-                    warn(
-                        f"OTT reconnect failed ({type(e).__name__}: {e}); "
-                        f"retrying in {_RECONNECT_DELAY:g}s"
-                    )
+                    warn(f"OTT reconnect failed ({type(e).__name__}: {e}); retrying in {_RECONNECT_DELAY:g}s")
                     self.mpv.closed.wait(_RECONNECT_DELAY)
                     continue
                 ok(f"rejoined room {self.ep.room} (follow-only)")
@@ -130,10 +125,7 @@ class Follower:
                 self._listen(self._conn)
                 return  # _listen returned cleanly (unload / mpv closed)
             except (ConnectionClosed, TimeoutError, OSError) as e:
-                warn(
-                    f"OTT connection lost ({type(e).__name__}: {e}); "
-                    f"reconnecting in {_RECONNECT_DELAY:g}s"
-                )
+                warn(f"OTT connection lost ({type(e).__name__}: {e}); reconnecting in {_RECONNECT_DELAY:g}s")
                 self.close()
                 self.mpv.closed.wait(_RECONNECT_DELAY)
         self.close()

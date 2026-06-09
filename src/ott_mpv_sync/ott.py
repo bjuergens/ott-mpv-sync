@@ -26,8 +26,11 @@ def get_token(grant_url: str) -> str:
             payload = json.load(r)
     except urllib.error.HTTPError as e:
         raise OttSyncError(f"auth grant failed: HTTP {e.code} at {grant_url}") from e
-    except (urllib.error.URLError, OSError) as e:
+    except urllib.error.URLError as e:
         raise OttSyncError(f"cannot reach OTT server at {grant_url}: {e.reason}") from e
+    except OSError as e:
+        # A bare OSError/TimeoutError (e.g. a read timeout) has no .reason attribute.
+        raise OttSyncError(f"cannot reach OTT server at {grant_url}: {e}") from e
     except json.JSONDecodeError as e:
         raise OttSyncError(f"auth grant returned invalid JSON from {grant_url}") from e
 
@@ -57,14 +60,8 @@ def connect_and_auth(ep: RoomEndpoints) -> tuple[ClientConnection, str]:
         bootstrap = conn.recv(timeout=_OPEN_TIMEOUT)
     except ConnectionClosed as e:
         conn.close()
-        raise OttSyncError(
-            f"room {ep.room!r} rejected our auth and closed the connection "
-            f"({type(e).__name__}: {e})"
-        ) from e
+        raise OttSyncError(f"room {ep.room!r} rejected our auth and closed the connection ({type(e).__name__}: {e})") from e
     except TimeoutError as e:
         conn.close()
-        raise OttSyncError(
-            f"room {ep.room!r} accepted the socket but sent no data within "
-            f"{_OPEN_TIMEOUT:g}s — cannot confirm the join"
-        ) from e
+        raise OttSyncError(f"room {ep.room!r} accepted the socket but sent no data within {_OPEN_TIMEOUT:g}s — cannot confirm the join") from e
     return conn, bootstrap

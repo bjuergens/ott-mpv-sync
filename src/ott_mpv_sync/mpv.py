@@ -59,10 +59,7 @@ class Mpv:
 
     def _check_socket_path(self) -> None:
         if os.path.exists(self.sock_path):
-            raise OttSyncError(
-                f"IPC socket already exists: {self.sock_path}. "
-                "Remove it or pass a different --socket."
-            )
+            raise OttSyncError(f"IPC socket already exists: {self.sock_path}. Remove it or pass a different --socket.")
         parent = os.path.dirname(self.sock_path) or "."
         if not os.path.isdir(parent):
             raise OttSyncError(f"IPC socket directory does not exist: {parent}")
@@ -85,10 +82,7 @@ class Mpv:
             return
         version = (int(m.group(1)), int(m.group(2)))
         if version < MIN_MPV:
-            warn(
-                f"mpv {version[0]}.{version[1]} is older than "
-                f"{MIN_MPV[0]}.{MIN_MPV[1]}; seeking/loadfile may misbehave."
-            )
+            warn(f"mpv {version[0]}.{version[1]} is older than {MIN_MPV[0]}.{MIN_MPV[1]}; seeking/loadfile may misbehave.")
 
     def _wait_for_socket(self) -> None:
         deadline = time.monotonic() + _SOCKET_TIMEOUT
@@ -99,9 +93,7 @@ class Mpv:
             if code is not None:
                 raise OttSyncError(f"mpv exited during startup (exit code {code})")
             time.sleep(0.05)
-        raise OttSyncError(
-            f"mpv IPC socket never appeared at {self.sock_path} within {_SOCKET_TIMEOUT:g}s"
-        )
+        raise OttSyncError(f"mpv IPC socket never appeared at {self.sock_path} within {_SOCKET_TIMEOUT:g}s")
 
     # -- IPC ---------------------------------------------------------------
     def command(self, *args) -> None:
@@ -132,7 +124,12 @@ class Mpv:
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 if line.strip():
-                    self._handle(json.loads(line))
+                    # Never let one bad frame kill this thread silently: that would
+                    # leave the follower running blind against an unobserved mpv.
+                    try:
+                        self._handle(json.loads(line))
+                    except (json.JSONDecodeError, KeyError) as e:
+                        warn(f"ignoring malformed mpv IPC frame ({type(e).__name__}: {e}): {line!r}")
         warn("mpv closed; shutting down")
         self.closed.set()
 
