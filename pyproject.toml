@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
-authors = [{ name = "wotaniip", email = "wotaniip@googlemail.com" }]
+authors = [{ name = "bjuergens" }]
 keywords = ["mpv", "opentogethertube", "ott", "websocket", "sync", "watch-together"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -33,9 +33,9 @@ dependencies = [
 ott-mpv-sync = "ott_mpv_sync.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/wotaniip/ott-mpv-sync"
-Repository = "https://github.com/wotaniip/ott-mpv-sync"
-Issues = "https://github.com/wotaniip/ott-mpv-sync/issues"
+Homepage = "https://github.com/bjuergens/ott-mpv-sync"
+Repository = "https://github.com/bjuergens/ott-mpv-sync"
+Issues = "https://github.com/bjuergens/ott-mpv-sync/issues"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
