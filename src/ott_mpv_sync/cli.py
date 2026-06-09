@@ -23,7 +23,15 @@ def _parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="ott-mpv-sync",
         description="Follow an OpenTogetherTube room with a local mpv (follow-only).",
-        epilog=("examples:\n  ott-mpv-sync https://opentogethertube.com/room/my-room\n  ott-mpv-sync https://ott.example.com/room/abc --mpv /usr/bin/mpv\n  ott-mpv-sync https://opentogethertube.com/room/my-room -- --fullscreen\n"),
+        epilog="\n".join(
+            [
+                "examples:",
+                "  ott-mpv-sync https://opentogethertube.com/room/my-room",
+                "  ott-mpv-sync https://ott.example.com/room/abc --mpv /usr/bin/mpv",
+                "  ott-mpv-sync https://opentogethertube.com/room/my-room -- --fullscreen",
+                "",
+            ]
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("room_url", help="full URL of the OTT room (from your browser)")
