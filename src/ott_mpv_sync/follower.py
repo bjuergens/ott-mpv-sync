@@ -63,16 +63,13 @@ class Follower:
             # Apply the initial position (`start=`) and any subtitle tracks
             # (`sub-files-append=`) as load options — atomic, so they can't race
             # the file-load the way separate `seek`/`sub-add` commands would.
-            # (mpv 0.37 loadfile is 3-arg: <url> <flags> <options>; options are
-            # comma-separated and the subtitle urls here contain no commas.)
+            # Options are comma-separated and the subtitle urls here contain no
+            # commas. (Mpv.loadfile papers over mpv's 0.38 loadfile arg change.)
             opts = []
             if pos is not None:
                 opts.append(f"start={pos}")
             opts += [f"sub-files-append={s['url']}" for s in new_source.subtitles]
-            if opts:
-                self.mpv.command("loadfile", new_source.url, "replace", ",".join(opts))
-            else:
-                self.mpv.command("loadfile", new_source.url, "replace")
+            self.mpv.loadfile(new_source.url, "replace", ",".join(opts))
             # Re-assert the room's play state: --keep-open pauses mpv at the
             # previous file's EOF, and a source-change delta usually omits
             # isPlaying (unchanged in the room), so without this an auto-advanced

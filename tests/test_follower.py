@@ -23,6 +23,14 @@ class FakeMpv:
     def command(self, *args):
         self.commands.append(args)
 
+    def loadfile(self, url, flags="replace", options=""):
+        # Mirrors Mpv.loadfile's canonical (pre-0.38, no <index>) shape; the
+        # real version-aware translation is covered in test_mpv.py.
+        args = ["loadfile", url, flags]
+        if options:
+            args.append(options)
+        self.commands.append(tuple(args))
+
 
 def make():
     mpv = FakeMpv()

@@ -17,6 +17,12 @@ import time
 from .utils import OttSyncError, error, ok, warn
 
 MIN_MPV = (0, 37)  # 3-arg loadfile / start= option verified from this version
+# mpv 0.38 inserted an <index> arg into loadfile, between <flags> and <options>:
+#   <=0.37: loadfile <url> <flags> <options>
+#   >=0.38: loadfile <url> <flags> <index> <options>
+# so passing an options string in the old position makes new mpv try to parse it
+# as the integer index ("argument index can't be parsed").
+LOADFILE_INDEX_MPV = (0, 38)
 _SOCKET_TIMEOUT = 5.0  # seconds to wait for mpv to create the IPC socket
 
 
@@ -30,12 +36,13 @@ class Mpv:
         self._rid = 0
         self._pending: dict[int, tuple] = {}
         self.mirror = {"time-pos": None, "pause": None}
+        self.version: tuple[int, int] | None = None  # set by _probe_version()
         self.closed = threading.Event()
 
     # -- lifecycle ---------------------------------------------------------
     def start(self) -> None:
         self._check_socket_path()
-        self._warn_on_old_version()
+        self._probe_version()
         # A normal, visible mpv (the user watches it), idle until the room gives
         # us a source.
         self.proc = subprocess.Popen(
@@ -66,7 +73,12 @@ class Mpv:
         if not os.access(parent, os.W_OK):
             raise OttSyncError(f"cannot create IPC socket in {parent} (not writable)")
 
-    def _warn_on_old_version(self) -> None:
+    def _probe_version(self) -> None:
+        """Read `mpv --version` into self.version; warn if older than MIN_MPV.
+
+        self.version stays None if the probe fails or output is unrecognized;
+        loadfile() then assumes the pre-0.38 (no <index>) form.
+        """
         try:
             out = subprocess.run(
                 [self.mpv_bin, "--version"],
@@ -80,9 +92,24 @@ class Mpv:
         m = re.search(r"mpv\s+v?(\d+)\.(\d+)", out)
         if not m:
             return
-        version = (int(m.group(1)), int(m.group(2)))
-        if version < MIN_MPV:
-            warn(f"mpv {version[0]}.{version[1]} is older than {MIN_MPV[0]}.{MIN_MPV[1]}; seeking/loadfile may misbehave.")
+        self.version = (int(m.group(1)), int(m.group(2)))
+        if self.version < MIN_MPV:
+            warn(f"mpv {self.version[0]}.{self.version[1]} is older than {MIN_MPV[0]}.{MIN_MPV[1]}; seeking/loadfile may misbehave.")
+
+    def loadfile(self, url: str, flags: str = "replace", options: str = "") -> None:
+        """loadfile, papering over the 0.38 <index> arg insertion.
+
+        `options` is a comma-separated mpv option string (e.g. "start=5,sub-files-append=..").
+        On mpv >= 0.38 we must wedge an <index> before it; -1 is mpv's documented
+        default (ignored for the `replace` flag we use). When the version is unknown
+        we assume the old form, matching MIN_MPV.
+        """
+        args = ["loadfile", url, flags]
+        if options:
+            if self.version is not None and self.version >= LOADFILE_INDEX_MPV:
+                args.append(-1)  # <index>: ignored by `replace`, just a placeholder
+            args.append(options)
+        self.command(*args)
 
     def _wait_for_socket(self) -> None:
         deadline = time.monotonic() + _SOCKET_TIMEOUT
