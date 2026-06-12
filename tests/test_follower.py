@@ -4,7 +4,7 @@ import threading
 import pytest
 from websockets.exceptions import ConnectionClosed
 
-from ott_mpv_sync import ott
+from ott_mpv_sync import media, ott
 from ott_mpv_sync.follower import Follower
 from ott_mpv_sync.roomurl import parse_room_url
 from ott_mpv_sync.utils import OttSyncError
@@ -38,6 +38,33 @@ def test_new_source_loads_with_start_option():
         }
     )
     assert ("loadfile", "http://x/v.mp4", "replace", "start=5.0") in mpv.commands
+
+
+def test_custom_json_source_loads_real_media_with_subs(monkeypatch):
+    # A custom-media manifest must not be handed to mpv directly: it's resolved
+    # to the real media url, with subtitle tracks attached as load options.
+    manifest = {
+        "sources": [{"url": "https://x/real.mp4", "quality": 1080}],
+        "textTracks": [{"url": "https://x/sub.ass", "srclang": "en", "default": True}],
+    }
+    monkeypatch.setattr(media, "_fetch_json", lambda url: manifest)
+    mpv, f = make()
+    f.apply(
+        {
+            "currentSource": {
+                "service": "direct",
+                "id": "https://x/m.json",
+                "mime": "application/json",
+            },
+            "playbackPosition": 5.0,
+        }
+    )
+    assert (
+        "loadfile",
+        "https://x/real.mp4",
+        "replace",
+        "start=5.0,sub-files-append=https://x/sub.ass",
+    ) in mpv.commands
 
 
 def test_new_source_reasserts_play_state_when_room_playing():

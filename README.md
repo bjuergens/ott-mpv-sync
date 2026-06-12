@@ -92,7 +92,8 @@ uv run ott-mpv-sync <room-url>          # run from source
 ```
 
 - `src/ott_mpv_sync/` — package: `cli` (entry + validation), `roomurl` (URL → endpoints),
-  `mpv` (launch + JSON IPC), `ott` (token + WebSocket), `follower` (sync → mpv commands).
+  `mpv` (launch + JSON IPC), `ott` (token + WebSocket), `media` (resolve a source/custom-
+  media manifest → media url + subtitles), `follower` (sync → mpv commands).
 - `tests/` — hermetic unit tests (URL parsing, delta translation). No network/mpv needed.
 - `scripts/probes/` — manual integration probes against a live room / real mpv.
 - `research/` — the OTT protocol reference and architecture notes that back the design.
@@ -100,8 +101,11 @@ uv run ott-mpv-sync <room-url>          # run from source
 ## Limitations
 
 Follow-only by design — it never controls the room. Source resolution targets `direct`
-(MP4) sources (`currentSource.src_url || id`); HLS/DASH and subtitle handling are not yet
-wired up. Locked/private rooms (which may need a logged-in token) are untested.
+sources (`currentSource.src_url || id`): a plain media file (MP4, …) plays directly, and a
+[custom media manifest](https://github.com/dyc3/opentogethertube/blob/master/docs/custom-media-format.md)
+(a `.json` source) is fetched and unwrapped to its highest-quality source plus any subtitle
+tracks it declares (attached via mpv `sub-files-append`). HLS/DASH are not yet wired up.
+Locked/private rooms (which may need a logged-in token) are untested.
 
 ## License
 

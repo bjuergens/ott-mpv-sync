@@ -9,7 +9,7 @@ import json
 
 from websockets.exceptions import ConnectionClosed
 
-from . import ott
+from . import media, ott
 from .mpv import Mpv
 from .roomurl import RoomEndpoints
 from .utils import OttSyncError, ok, warn
@@ -34,16 +34,20 @@ class Follower:
         pos = delta.get("playbackPosition")  # may be absent (e.g. bare resume)
 
         # 1. source — detect a *new* url to (re)load
-        new_url = None
+        new_source = None  # a ResolvedSource (media url + subtitle tracks)
         if "currentSource" in delta:
             cs = delta["currentSource"]
             if cs is None:
                 self.mpv.command("stop")
                 self.src_url = None
             else:
-                url = cs.get("src_url") or cs["id"]  # `direct` -> id is the URL
+                # Dedup on the room-provided url (`direct` -> id is the URL); a
+                # custom-media manifest is then fetched/unwrapped to the real
+                # media url + subtitles by media.resolve().
+                url = cs.get("src_url") or cs["id"]
                 if url != self.src_url:
-                    new_url = url
+                    new_source = media.resolve(cs)
+                    self.src_url = url
 
         # 2. speed
         if "playbackSpeed" in delta:
@@ -55,21 +59,27 @@ class Follower:
             self.mpv.command("set_property", "pause", not self.playing)
 
         # 4. position
-        if new_url is not None:
-            # Apply the initial position via `start=` ON the load — atomic, so it
-            # can't race the file-load the way a separate `seek` does. (mpv 0.37
-            # loadfile is 3-arg: <url> <flags> <options>.)
+        if new_source is not None:
+            # Apply the initial position (`start=`) and any subtitle tracks
+            # (`sub-files-append=`) as load options — atomic, so they can't race
+            # the file-load the way separate `seek`/`sub-add` commands would.
+            # (mpv 0.37 loadfile is 3-arg: <url> <flags> <options>; options are
+            # comma-separated and the subtitle urls here contain no commas.)
+            opts = []
             if pos is not None:
-                self.mpv.command("loadfile", new_url, "replace", f"start={pos}")
+                opts.append(f"start={pos}")
+            opts += [f"sub-files-append={s['url']}" for s in new_source.subtitles]
+            if opts:
+                self.mpv.command("loadfile", new_source.url, "replace", ",".join(opts))
             else:
-                self.mpv.command("loadfile", new_url, "replace")
-            self.src_url = new_url
+                self.mpv.command("loadfile", new_source.url, "replace")
             # Re-assert the room's play state: --keep-open pauses mpv at the
             # previous file's EOF, and a source-change delta usually omits
             # isPlaying (unchanged in the room), so without this an auto-advanced
             # video would stay paused while the room keeps playing.
             self.mpv.command("set_property", "pause", not self.playing)
-            ok(f"loadfile {new_url} (start={pos}, playing={self.playing})")
+            subnote = f", {len(new_source.subtitles)} sub(s)" if new_source.subtitles else ""
+            ok(f"loadfile {new_source.url} (start={pos}, playing={self.playing}{subnote})")
         elif pos is not None:
             # Standalone seek within an already-loaded file. Guard on a known
             # time-pos: if None, the file isn't ready yet (or just loaded with
