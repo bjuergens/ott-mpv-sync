@@ -17,6 +17,7 @@ class FakeMpv:
 
     def __init__(self):
         self.commands = []
+        self.subs = None  # last set_subtitles() payload
         self.mirror = {"time-pos": None, "pause": None}
         self.closed = threading.Event()
 
@@ -30,6 +31,11 @@ class FakeMpv:
         if options:
             args.append(options)
         self.commands.append(tuple(args))
+
+    def set_subtitles(self, subs):
+        # Real Mpv defers these to sub-add on file-loaded (see test_mpv.py); here
+        # we just record what the follower asked to attach.
+        self.subs = subs
 
 
 def make():
@@ -50,7 +56,7 @@ def test_new_source_loads_with_start_option():
 
 def test_custom_json_source_loads_real_media_with_subs(monkeypatch):
     # A custom-media manifest must not be handed to mpv directly: it's resolved
-    # to the real media url, with subtitle tracks attached as load options.
+    # to the real media url, and each subtitle track is attached via sub-add.
     manifest = {
         "sources": [{"url": "https://x/real.mp4", "quality": 1080}],
         "textTracks": [{"url": "https://x/sub.ass", "srclang": "en", "default": True}],
@@ -67,12 +73,40 @@ def test_custom_json_source_loads_real_media_with_subs(monkeypatch):
             "playbackPosition": 5.0,
         }
     )
-    assert (
-        "loadfile",
-        "https://x/real.mp4",
-        "replace",
-        "start=5.0,sub-files-append=https://x/sub.ass",
-    ) in mpv.commands
+    # loadfile carries only the start position; subs are handed to set_subtitles
+    # (the actual sub-add'ing on file-loaded is covered in test_mpv.py).
+    assert ("loadfile", "https://x/real.mp4", "replace", "start=5.0") in mpv.commands
+    assert mpv.subs == [
+        {"url": "https://x/sub.ass", "title": "", "lang": "en", "default": True},
+    ]
+
+
+def test_multiple_sub_tracks_all_registered(monkeypatch):
+    # Regression: passing several sub-files-append in one loadfile options string
+    # silently keeps only the last track. Every track must be handed to mpv, each
+    # with its own title/lang, default first so it's the one pre-selected.
+    manifest = {
+        "sources": [{"url": "https://x/real.mp4", "quality": 1080}],
+        "textTracks": [
+            {"url": "https://x/en.ass", "contentType": "text/x-ass",
+             "name": "English subs (ASS)", "srclang": "en", "default": True},
+            {"url": "https://x/en.vtt", "contentType": "text/vtt",
+             "name": "English subs (VTT)", "srclang": "en", "default": False},
+        ],
+    }
+    monkeypatch.setattr(media, "_fetch_json", lambda url: manifest)
+    mpv, f = make()
+    f.apply(
+        {
+            "currentSource": {"service": "direct", "id": "https://x/m.json",
+                              "mime": "application/json"},
+            "playbackPosition": 0.0,
+        }
+    )
+    assert mpv.subs == [
+        {"url": "https://x/en.ass", "title": "English subs (ASS)", "lang": "en", "default": True},
+        {"url": "https://x/en.vtt", "title": "English subs (VTT)", "lang": "en", "default": False},
+    ]
 
 
 def test_new_source_reasserts_play_state_when_room_playing():

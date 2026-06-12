@@ -60,15 +60,18 @@ class Follower:
 
         # 4. position
         if new_source is not None:
-            # Apply the initial position (`start=`) and any subtitle tracks
-            # (`sub-files-append=`) as load options — atomic, so they can't race
-            # the file-load the way separate `seek`/`sub-add` commands would.
-            # Options are comma-separated and the subtitle urls here contain no
-            # commas. (Mpv.loadfile papers over mpv's 0.38 loadfile arg change.)
+            # Apply the initial position as a load option (`start=`) — atomic, so
+            # it can't race the file-load the way a separate `seek` would.
+            # (Mpv.loadfile papers over mpv's 0.38 loadfile arg change.)
             opts = []
             if pos is not None:
                 opts.append(f"start={pos}")
-            opts += [f"sub-files-append={s['url']}" for s in new_source.subtitles]
+            # Register every subtitle track as its own labelled, selectable sub.
+            # mpv attaches them (via sub-add) once it reports the file loaded:
+            # `sub-files-append` in loadfile options can't carry per-track titles
+            # and keeps only the *last* of several, while sub-add'ing before the
+            # file loads makes the `select` on the default track error out.
+            self.mpv.set_subtitles(new_source.subtitles)
             self.mpv.loadfile(new_source.url, "replace", ",".join(opts))
             # Re-assert the room's play state: --keep-open pauses mpv at the
             # previous file's EOF, and a source-change delta usually omits

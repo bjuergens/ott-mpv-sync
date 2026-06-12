@@ -37,6 +37,12 @@ class Mpv:
         self._pending: dict[int, tuple] = {}
         self.mirror = {"time-pos": None, "pause": None}
         self.version: tuple[int, int] | None = None  # set by _probe_version()
+        # Subtitle tracks to sub-add once mpv reports the file loaded. They can't
+        # ride along in loadfile (sub-files-append keeps only the last) and can't
+        # be added before load (a `select` on an unloaded file errors), so the
+        # reader thread flushes them on the next `file-loaded` event.
+        self._pending_subs: list[dict] = []
+        self._lock = threading.Lock()  # guards _rid/_pending/_pending_subs
         self.closed = threading.Event()
 
     # -- lifecycle ---------------------------------------------------------
@@ -99,7 +105,7 @@ class Mpv:
     def loadfile(self, url: str, flags: str = "replace", options: str = "") -> None:
         """loadfile, papering over the 0.38 <index> arg insertion.
 
-        `options` is a comma-separated mpv option string (e.g. "start=5,sub-files-append=..").
+        `options` is a comma-separated mpv option string (e.g. "start=5").
         On mpv >= 0.38 we must wedge an <index> before it; -1 is mpv's documented
         default (ignored for the `replace` flag we use). When the version is unknown
         we assume the old form, matching MIN_MPV.
@@ -110,6 +116,36 @@ class Mpv:
                 args.append(-1)  # <index>: ignored by `replace`, just a placeholder
             args.append(options)
         self.command(*args)
+
+    def set_subtitles(self, subs: list[dict]) -> None:
+        """Queue subtitle tracks to attach on the next file-loaded.
+
+        Each sub is {"url", "title", "lang", "default"} (see media.ResolvedSource).
+        Call before/with the loadfile they belong to; the reader thread applies
+        them via sub-add once mpv reports the file loaded. Replaces any still-
+        pending set, so a new source never inherits the previous one's tracks.
+        """
+        with self._lock:
+            self._pending_subs = list(subs)
+
+    @staticmethod
+    def _sub_add_args(sub: dict) -> list:
+        # sub-add is positional: <url> [<flags> [<title> [<lang>]]]. `select`
+        # makes the default track active; others use `auto`. To pass a lang we
+        # must occupy the title slot too, even if the title is empty.
+        args = ["sub-add", sub["url"], "select" if sub.get("default") else "auto"]
+        title, lang = sub.get("title") or "", sub.get("lang") or ""
+        if title or lang:
+            args.append(title)
+            if lang:
+                args.append(lang)
+        return args
+
+    def _apply_pending_subs(self) -> None:
+        with self._lock:
+            subs, self._pending_subs = self._pending_subs, []
+        for s in subs:
+            self.command(*self._sub_add_args(s))
 
     def _wait_for_socket(self) -> None:
         deadline = time.monotonic() + _SOCKET_TIMEOUT
@@ -127,14 +163,16 @@ class Mpv:
         """Fire-and-forget JSON IPC command. Failures are logged by the reader."""
         if self.conn is None:
             return
-        self._rid += 1
-        self._pending[self._rid] = args
-        frame = json.dumps({"command": list(args), "request_id": self._rid})
-        try:
-            self.conn.sendall(frame.encode() + b"\n")
-        except OSError as e:
-            error(f"IPC send failed ({args[0] if args else '?'}): {e}")
-            self.closed.set()
+        with self._lock:
+            self._rid += 1
+            rid = self._rid
+            self._pending[rid] = args
+            frame = json.dumps({"command": list(args), "request_id": rid})
+            try:
+                self.conn.sendall(frame.encode() + b"\n")
+            except OSError as e:
+                error(f"IPC send failed ({args[0] if args else '?'}): {e}")
+                self.closed.set()
 
     def _reader(self) -> None:
         buf = b""
@@ -161,8 +199,12 @@ class Mpv:
         self.closed.set()
 
     def _handle(self, msg: dict) -> None:
-        if msg.get("event") == "property-change":
+        event = msg.get("event")
+        if event == "property-change":
             self.mirror[msg["name"]] = msg.get("data")
+        elif event == "file-loaded":
+            # The file is now playable, so sub-add (incl. `select`) will take.
+            self._apply_pending_subs()
         elif "request_id" in msg:
             cmd = self._pending.pop(msg["request_id"], None)
             if msg.get("error") not in (None, "success"):
